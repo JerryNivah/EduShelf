@@ -57,3 +57,17 @@ export async function findUserByEmail(email) {
     },
   });
 }
+// Look up the current user for protected requests.
+// Never retrieve their password hash here.
+export async function findUserForAuthById(userId) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+    },
+  });
+}
