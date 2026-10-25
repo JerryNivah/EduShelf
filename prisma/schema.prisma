@@ -8,6 +8,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -29,6 +30,8 @@ model User {
   cart         Cart?
   Wishlist     Wishlist?
   Order        Order[]
+  refreshSessions RefreshSession[]
+  refreshSessionFamilies RefreshSessionFamily[]
 }
 
 enum BookFormat {
@@ -176,4 +179,37 @@ model Payment {
   transactionRef String?
   status         PaymentStatus @default(PENDING)
   createdAt      DateTime      @default(now())
+}
+
+
+model RefreshSession {
+  id        String @id @default(uuid()) @db.Uuid
+  familyId  String @db.Uuid
+
+  userId    Int
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String @unique @db.VarChar(64)
+
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+
+  family RefreshSessionFamily @relation(fields: [familyId], references: [id], onDelete: Cascade)
+}
+model RefreshSessionFamily {
+  id String @id @default(uuid()) @db.Uuid
+  userId    Int
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  sessions RefreshSession[]
 }
