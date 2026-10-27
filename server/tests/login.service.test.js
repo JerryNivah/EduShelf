@@ -12,6 +12,7 @@ const mockUser = {
   email: "test@example.com",
   role: "CUSTOMER",
   passwordHash: "hashed-password",
+  emailVerifiedAt: new Date("2026-10-01T00:00:00Z"),
 };
 
 const credentials = {
@@ -97,6 +98,24 @@ test("rejects an account without a password hash", async () => {
     {
       statusCode: 401,
       message: "Invalid email or password",
+    }
+  );
+});
+test("rejects unverified email after a correct password", async () => {
+  const login = createLoginService({
+    findUserByEmail: async () => ({
+      ...mockUser,
+      emailVerifiedAt: null,
+    }),
+
+    verifyPassword: async () => true,
+  });
+
+  await assert.rejects(
+    () => login(credentials),
+    {
+      statusCode: 403,
+      message: "Email verification required",
     }
   );
 });

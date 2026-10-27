@@ -32,6 +32,8 @@ model User {
   Order        Order[]
   refreshSessions RefreshSession[]
   refreshSessionFamilies RefreshSessionFamily[]
+  emailVerifiedAt       DateTime?
+  emailVerificationCode EmailVerificationCode?
 }
 
 enum BookFormat {
@@ -212,4 +214,24 @@ model RefreshSessionFamily {
 
   @@index([userId])
   sessions RefreshSession[]
+}
+
+model EmailVerificationCode {
+  userId Int @id
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  codeHash String @db.VarChar(64)
+
+  expiresAt DateTime
+
+  attempts Int @default(0)
+
+  lastSentAt DateTime @default(now())
+  sentCount Int @default(1)
+  windowStartedAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
 }

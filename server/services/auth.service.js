@@ -95,6 +95,16 @@ export function createLoginService(dependencies) {
       throw new AppError("Invalid email or password", 401);
     }
 
+    if (
+      user.email &&
+      !(user.emailVerifiedAt instanceof Date)
+    ) {
+      throw new AppError(
+        "Email verification required",
+        403
+      );
+    }
+
     // 4. Return only safe user information
     return {
       id: user.id,

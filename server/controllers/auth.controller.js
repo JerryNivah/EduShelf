@@ -15,25 +15,49 @@ import {
 import {
   serializeRefreshCookie,
 } from "../utils/refreshCookie.js";
+import {
+  requestEmailVerificationCode,
+} from "../services/emailVerification.service.js";
 
-export async function registerController(req, res) {
-  // 1. Validate and normalize incoming data
-  const validatedData = validate(registerSchema, req.body);
+export function createRegisterController(
+  register,
+  requestVerification
+) {
+  return async function registerController(req, res) {
+    res.setHeader("Cache-Control", "no-store");
 
-  // 2. Register the customer
-  const user = await registerUser(validatedData);
+    const validated = validate(registerSchema, req.body);
+    const user = await register(validated);
 
-  // 3. Return a successful HTTP response
-  return res.status(201).json({
-    success: true,
-    message: "Registration successful",
-    data: {
-      user,
-    },
-  });
+    // Registration has already committed to PostgreSQL.
+    // A delivery failure must not pretend the account
+    // was never created.
+    try {
+      await requestVerification({
+        email: user.email,
+      });
+    } catch (error) {
+      console.error(
+        "Verification dispatch failed after registration:",
+        error?.name
+      );
+    }
+
+    return res.status(201).json({
+      success: true,
+      message:
+        "Account created. Verify your email before signing in. If no code arrives, request another.",
+      data: { user },
+    });
+  };
 }
 
-
+export const registerController =
+  createRegisterController(
+    registerUser,
+    requestEmailVerificationCode
+  );
+  
 export function createLoginController(authenticate) {
   return async function loginController(req, res) {
     // 1. Validate incoming credentials

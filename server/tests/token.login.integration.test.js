@@ -23,7 +23,13 @@ import {
 import {
   createLoginHandler,
 } from "../../api/auth/login.js";
+import {
+  createOriginGuard,
+} from "../middleware/requireTrustedOrigin.js";
 
+const testOriginGuard = createOriginGuard([
+  "http://localhost:3000",
+]);
 // Test credentials only
 const email = "jwt.integration@example.com";
 const password = "TestOnly!Password2026";
@@ -68,6 +74,7 @@ async function createTestHandler() {
         email,
         role: "CUSTOMER",
         passwordHash,
+        emailVerifiedAt: new Date("2026-10-01T00:00:00Z"),
       };
     },
 
@@ -80,7 +87,8 @@ async function createTestHandler() {
   });
 
   return createLoginHandler(
-    createLoginController(loginWithToken)
+    createLoginController(loginWithToken),
+    testOriginGuard
   );
 }
 
@@ -91,6 +99,9 @@ test("authenticates and issues a verifiable JWT", async () => {
 
   await handler({
     method: "POST",
+    headers: {
+      origin: "http://localhost:3000",
+    },
     body: {
       email: " JWT.INTEGRATION@EXAMPLE.COM ",
       password,
@@ -124,6 +135,9 @@ test("rejects wrong password without issuing a JWT", async () => {
 
   await handler({
     method: "POST",
+    headers: {
+      origin: "http://localhost:3000",
+    },
     body: {
       email,
       password: "WrongPassword!2026",

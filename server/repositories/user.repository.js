@@ -54,6 +54,7 @@ export async function findUserByEmail(email) {
       email: true,
       role: true,
       passwordHash: true,
+      emailVerifiedAt: true,
     },
   });
 }

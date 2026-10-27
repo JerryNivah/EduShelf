@@ -2,7 +2,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import handler from "../../api/auth/register.js";
+import {
+  createRegisterHandler,
+} from "../../api/auth/register.js";
+
+import {
+  registerController,
+} from "../controllers/auth.controller.js";
+
+import {
+  createOriginGuard,
+} from "../middleware/requireTrustedOrigin.js";
+
+const handler = createRegisterHandler(
+  registerController,
+  createOriginGuard([
+    "http://localhost:3000",
+  ])
+);
 
 function createMockResponse() {
   return {
@@ -47,6 +64,9 @@ test("rejects GET requests", async () => {
  test("rejects invalid registration requests", async () => {
   const req = {
     method: "POST",
+    headers: {
+      origin: "http://localhost:3000",
+    },
     body: {
       firstName: "J",
       lastName: "Doe",
@@ -54,7 +74,6 @@ test("rejects GET requests", async () => {
       password: "123",
     },
   };
-
   // Step 1: Create the response object
   const res = createMockResponse();
 
@@ -78,4 +97,25 @@ test("rejects GET requests", async () => {
 
   // Step 6: Ensure req.body was passed correctly
   assert.ok(!invalidFields.includes("request"));
+});
+test("rejects registration from untrusted origins", async () => {
+  const req = {
+    method: "POST",
+    headers: {
+      origin: "https://malicious.example",
+    },
+    body: {
+      firstName: "John",
+      lastName: "Doe",
+      email: "john@example.com",
+      password: "SecurePass123!",
+    },
+  };
+
+  const res = createMockResponse();
+
+  await handler(req, res);
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.success, false);
 });
