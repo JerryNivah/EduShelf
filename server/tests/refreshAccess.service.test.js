@@ -5,10 +5,19 @@ import {
   createRefreshAccessService,
 } from "../services/refreshSession.service.js";
 
+const findVerifiedUser = async (userId) => ({
+  id: userId,
+  email: "verified@example.com",
+  emailVerifiedAt: new Date("2026-10-01T00:00:00Z"),
+});
+
 test("issues a new access JWT after successful rotation", async () => {
   const calls = [];
 
   const expiresAt = new Date("2030-01-07T00:00:00Z");
+
+  const familyId =
+    "11111111-1111-4111-8111-111111111111";
 
   const refreshAccessSession = createRefreshAccessService({
     rotateRawRefreshToken: async ({ refreshToken }) => {
@@ -19,21 +28,14 @@ test("issues a new access JWT after successful rotation", async () => {
       return {
         status: "ROTATED",
         userId: 7,
-        familyId: "11111111-1111-4111-8111-111111111111",
+        familyId,
         refreshToken: "new-refresh-token",
         expiresAt,
       };
-      assert.equal(result.status, "ROTATED");
-      assert.equal(result.accessToken, "new-access-jwt");
-      assert.equal(result.refreshToken, "new-refresh-token");
-      assert.equal(result.expiresAt, expiresAt);
-      assert.equal(
-        result.familyId,
-        "11111111-1111-4111-8111-111111111111"
-      );
     },
 
-    
+    // NEW: Confirm the account is verified.
+    findUser: findVerifiedUser,
 
     signAccessToken: async (userId) => {
       calls.push("sign");
@@ -41,6 +43,13 @@ test("issues a new access JWT after successful rotation", async () => {
       assert.equal(userId, 7);
 
       return "new-access-jwt";
+    },
+
+    // NEW: A successful refresh must not revoke the family.
+    revokeFamily: async () => {
+      throw new Error(
+        "Family revocation must not run during successful refresh"
+      );
     },
   });
 
@@ -54,7 +63,9 @@ test("issues a new access JWT after successful rotation", async () => {
   assert.equal(result.accessToken, "new-access-jwt");
   assert.equal(result.refreshToken, "new-refresh-token");
   assert.equal(result.expiresAt, expiresAt);
+  assert.equal(result.familyId, familyId);
 });
+
 test("does not issue access JWTs for rejected refresh tokens", async () => {
   for (const status of ["INVALID", "REPLAY_DETECTED"]) {
     let signingCalled = false;
@@ -135,6 +146,9 @@ test("revokes the family when JWT signing fails", async () => {
       };
     },
 
+    // NEW: Verified account lookup
+    findUser: findVerifiedUser,
+
     signAccessToken: async (userId) => {
       calls.push("sign");
 
@@ -188,10 +202,13 @@ test("preserves signing and revocation errors", async () => {
       };
     },
 
+    // NEW: Verified account lookup
+    findUser: findVerifiedUser,
+
     signAccessToken: async () => {
-      calls.push("sign");
-      throw signingError;
-    },
+       calls.push("sign");
+       throw signingError;
+     },
 
     revokeFamily: async ({ familyId: receivedFamilyId }) => {
       calls.push("revoke");
@@ -222,4 +239,48 @@ test("preserves signing and revocation errors", async () => {
     "sign",
     "revoke",
   ]);
+});
+test("revokes refresh family for an unverified user", async () => {
+  const familyId =
+    "11111111-1111-4111-8111-111111111111";
+
+  let signingCalled = false;
+  let revoked = false;
+
+  const refreshAccessSession = createRefreshAccessService({
+    rotateRawRefreshToken: async () => ({
+      status: "ROTATED",
+      userId: 7,
+      familyId,
+      refreshToken: "replacement-token",
+      expiresAt: new Date("2030-01-07"),
+    }),
+
+    findUser: async () => ({
+      id: 7,
+      email: "unverified@example.com",
+      emailVerifiedAt: null,
+    }),
+
+    signAccessToken: async () => {
+      signingCalled = true;
+      return "access-jwt";
+    },
+
+    revokeFamily: async ({ familyId: receivedId }) => {
+      assert.equal(receivedId, familyId);
+      revoked = true;
+      return 2;
+    },
+  });
+
+  const result = await refreshAccessSession({
+    refreshToken: "original-token",
+  });
+
+  assert.equal(result.status, "INVALID");
+  assert.equal(result.accessToken, null);
+  assert.equal(result.refreshToken, null);
+  assert.equal(signingCalled, false);
+  assert.equal(revoked, true);
 });

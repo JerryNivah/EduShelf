@@ -69,6 +69,7 @@ export async function findUserForAuthById(userId) {
       lastName: true,
       email: true,
       role: true,
+      emailVerifiedAt: true,
     },
   });
 }

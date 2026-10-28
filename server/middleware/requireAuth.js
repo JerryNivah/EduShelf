@@ -61,7 +61,16 @@ export function createRequireAuth({
         401
       );
     }
-
+    // Prevents unverified accounts from using an access JWT that was issued before we introduced email verification.
+    if (
+      user.email &&
+      !(user.emailVerifiedAt instanceof Date)
+    ) {
+      throw new AppError(
+        "Email verification required",
+        403
+      );
+    }
     // Trusted server-side identity for downstream code.
     req.auth = {
       userId: user.id,

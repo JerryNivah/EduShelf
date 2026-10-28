@@ -15,6 +15,9 @@ import {
   import {
     signAccessToken,
   } from "../utils/accessToken.js";
+  import {
+    findUserForAuthById,
+  } from "../repositories/user.repository.js";
 
 export function classifyRefreshSession(
   session,
@@ -194,6 +197,7 @@ export function createRefreshAccessService(dependencies) {
     rotateRawRefreshToken,
     signAccessToken,
     revokeFamily,
+    findUser,
   } = dependencies;
 
   return async function refreshAccessSession({ refreshToken }) {
@@ -214,28 +218,48 @@ export function createRefreshAccessService(dependencies) {
 
     // 3. Generate the new access JWT
 let accessToken;
+let ineligible = false;
 
 try {
+  // A successful rotation has already committed.
+  // Recheck the current account before issuing credentials.
+  const user = await findUser(rotation.userId);
+
+  if (
+    !user ||
+    (user.email && !(user.emailVerifiedAt instanceof Date))
+  ) {
+    ineligible = true;
+    throw new Error("Account is not eligible for refresh");
+  }
+
   accessToken = await signAccessToken(rotation.userId);
-} catch (signingError) {
-  // Rotation already committed. Revoke the family
-  // so the undelivered replacement cannot remain active.
+
+} catch (error) {
+  // Revoke the newly rotated family on any failure.
   try {
     await revokeFamily({
       familyId: rotation.familyId,
     });
   } catch (revocationError) {
-    // Preserve both failures for investigation.
     throw new AggregateError(
-      [signingError, revocationError],
-      "JWT signing and refresh-family revocation failed"
+      [error, revocationError],
+      "Refresh failure and family revocation failed"
     );
   }
 
-  // Preserve the original signing failure.
-  throw signingError;
-}
+  // The controller will return 401 and clear the cookie.
+  if (ineligible) {
+    return {
+      status: "INVALID",
+      accessToken: null,
+      refreshToken: null,
+      expiresAt: null,
+    };
+  }
 
+  throw error;
+}
     // 4. Return credentials for controller-level delivery
     return {
       status: "ROTATED",
@@ -251,4 +275,5 @@ export const refreshAccessSession = createRefreshAccessService({
   rotateRawRefreshToken,
   signAccessToken,
   revokeFamily: revokeRefreshSessionFamily,
+  findUser: findUserForAuthById,
 });

@@ -27,6 +27,7 @@ const customer = {
   lastName: "Customer",
   email: "test@example.com",
   role: "CUSTOMER",
+  emailVerifiedAt: new Date("2026-10-01T00:00:00Z"),
 };
 
 function createAuth(findUser = async () => customer) {
@@ -238,4 +239,22 @@ test("GET /me enforces its HTTP method", async () => {
   assert.equal(res.statusCode, 405);
   assert.equal(res.headers.allow, "GET");
   assert.equal(authCalled, false);
+});
+
+test("blocks unverified users even with valid JWTs", async () => {
+  const token = await jwt.signAccessToken(7);
+
+  const authenticate = createAuth(async () => ({
+    ...customer,
+    emailVerifiedAt: null,
+  }));
+
+  await assert.rejects(
+    () => authenticate({
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    }),
+    { statusCode: 403 }
+  );
 });

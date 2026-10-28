@@ -1,5 +1,6 @@
 import "dotenv/config";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 
 import {
@@ -69,15 +70,34 @@ const prisma = new PrismaClient();
 
 async function main() {
   let familyId = null;
+  let createdCustomerId = null;
 
   try {
-    // Use an existing development test customer
-    const customer = await prisma.user.findFirst({
-      where: { role: "CUSTOMER" },
-      select: { id: true },
+   
+    // Create a dedicated, verified development test customer.
+    const customer = await prisma.user.create({
+      data: {
+        firstName: "Refresh",
+        lastName: "Integration",
+        email: `refresh-test-${randomUUID()}@example.com`,
+        role: "CUSTOMER",
+        emailVerifiedAt: new Date(),
+      },
+      select: {
+        id: true,
+        emailVerifiedAt: true,
+      },
     });
 
-    assert.ok(customer, "No test customer found");
+    createdCustomerId = customer.id;
+
+    assert.ok(
+      customer.emailVerifiedAt instanceof Date,
+      "Test customer must have a verified email"
+    );
+
+    console.log("Verified test customer: PASSED");
+
 
     // 1. Issue a real refresh token
     const issued = await issueInitialRefreshToken({
@@ -167,7 +187,32 @@ assert.ok(
   verifiedToken,
   "Refreshed access JWT must verify successfully"
 );
+// Security test: tampering with the signature must fail
+const parts = accessToken.split(".");
 
+assert.equal(parts.length, 3);
+
+const signature = parts[2];
+
+// Replace the first signature character
+const changedCharacter =
+  signature[0] === "A" ? "B" : "A";
+
+const tamperedSignature =
+  changedCharacter + signature.slice(1);
+
+const tamperedToken = [
+  parts[0],
+  parts[1],
+  tamperedSignature,
+].join(".");
+
+// A modified JWT must never verify successfully
+await assert.rejects(
+  () => verifyAccessToken(tamperedToken)
+);
+
+console.log("Tampered access JWT rejection: PASSED");
 // Inspect claims only after successful verification
 const claims = decodeJwt(accessToken);
 const header = decodeProtectedHeader(accessToken);
@@ -382,8 +427,10 @@ assert.equal(finalSessionCount, 2);
 
 console.log("Revoked replacement token blocked: PASSED");
 
-  } finally {
-    // Remove only records created by this test
+ 
+} finally {
+  try {
+    // Remove refresh sessions created by this test.
     if (familyId) {
       await prisma.refreshSession.deleteMany({
         where: { familyId },
@@ -394,9 +441,18 @@ console.log("Revoked replacement token blocked: PASSED");
       });
     }
 
-    await prisma.$disconnect();
+    // Remove the temporary verified customer.
+    if (createdCustomerId !== null) {
+      await prisma.user.delete({
+        where: { id: createdCustomerId },
+      });
+    }
+
     console.log("Test cleanup: COMPLETE");
+  } finally {
+    await prisma.$disconnect();
   }
+}
 }
 
 main().catch((error) => {
