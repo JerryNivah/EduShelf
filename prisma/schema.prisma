@@ -235,3 +235,11 @@ model EmailVerificationCode {
 
   @@index([expiresAt])
 }
+
+model AuthRateLimit {
+  key       String   @id @db.VarChar(64)
+  count     Int      @default(0)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}

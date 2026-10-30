@@ -12,10 +12,16 @@ import { env } from "../../server/config/env.js";
 import {
   createConfiguredOriginGuard,
 } from "../../server/config/trustedOriginGuard.js";
+import {
+  createAuthRateLimitGuard,
+} from "../../server/middleware/authRateLimit.js";
 
 export function createLoginHandler(
-  controller,
-originGuard = (req) => createConfiguredOriginGuard(env)(req)) {
+  controller = sessionLoginController,
+  originGuard = (req) =>
+    createConfiguredOriginGuard(env)(req),
+  rateLimitGuard = async () => {}
+) {
   return async function handler(req, res) {
     // Never cache authentication responses
     res.setHeader("Cache-Control", "no-store");
@@ -30,6 +36,7 @@ originGuard = (req) => createConfiguredOriginGuard(env)(req)) {
       // Validate the origin before authenticating
       originGuard(req);
       // Delegate to the injected controller
+      await rateLimitGuard(req, res);
       return await controller(req, res);
 
     } catch (error) {
@@ -40,4 +47,12 @@ originGuard = (req) => createConfiguredOriginGuard(env)(req)) {
 }
 
 // Production handler uses the real login controller
-export default createLoginHandler(sessionLoginController);
+export default createLoginHandler(
+  sessionLoginController,
+  undefined,
+  createAuthRateLimitGuard({
+    scope: "login-ip",
+    limit: 10,
+    windowMs: 15 * 60 * 1000,
+  })
+);

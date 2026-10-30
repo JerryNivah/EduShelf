@@ -15,11 +15,15 @@ import {
 } from "../../server/config/trustedOriginGuard.js";
 
 import { env } from "../../server/config/env.js";
+import {
+  createAuthRateLimitGuard,
+} from "../../server/middleware/authRateLimit.js";
 
 export function createRegisterHandler(
   controller = registerController,
   originGuard = (req) =>
-    createConfiguredOriginGuard(env)(req)
+    createConfiguredOriginGuard(env)(req),
+  rateLimitGuard = async () => {}
 ) {
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
@@ -31,7 +35,7 @@ export function createRegisterHandler(
       }
 
       originGuard(req);
-
+      await rateLimitGuard(req,res);
       return await controller(req, res);
     } catch (error) {
       return handleError(error, res);
@@ -39,4 +43,12 @@ export function createRegisterHandler(
   };
 }
 
-export default createRegisterHandler();
+export default createRegisterHandler(
+  registerController,
+  undefined,
+  createAuthRateLimitGuard({
+    scope: "register-ip",
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  })
+);

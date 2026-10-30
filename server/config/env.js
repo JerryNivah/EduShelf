@@ -24,6 +24,7 @@ const envSchema = z
       EMAIL_OTP_SECRET: z.string().min(32).optional(),
       RESEND_API_KEY: z.string().optional(),
       RESEND_FROM_EMAIL: z.string().optional(),
+      RATE_LIMIT_SECRET: z.string().min(32),
   })
   .refine(
     (data) => data.JWT_SECRET !== data.JWT_REFRESH_SECRET,

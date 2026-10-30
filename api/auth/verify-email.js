@@ -24,10 +24,15 @@ import {
   createConfiguredOriginGuard,
 } from "../../server/config/trustedOriginGuard.js";
 
+import {
+  createAuthRateLimitGuard,
+} from "../../server/middleware/authRateLimit.js";
+
 export function createVerifyEmailHandler(
   verifyCode,
   originGuard = (req) =>
-    createConfiguredOriginGuard(env)(req)
+    createConfiguredOriginGuard(env)(req),
+  rateLimitGuard = async () => {}
 ) {
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
@@ -39,6 +44,7 @@ export function createVerifyEmailHandler(
       }
 
       originGuard(req);
+      await rateLimitGuard(req, res);
 
       const { email, code } = validate(
         verifyEmailSchema,
@@ -68,5 +74,11 @@ export function createVerifyEmailHandler(
 }
 
 export default createVerifyEmailHandler(
-  verifyEmailVerificationCode
+  verifyEmailVerificationCode,
+  undefined,
+  createAuthRateLimitGuard({
+    scope: "verify-email-ip",
+    limit: 10,
+    windowMs: 15 * 60 * 1000,
+  })
 );

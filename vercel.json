@@ -8,6 +8,12 @@
   "buildCommand": "npm run vercel-build",
   "devCommand": "cd client && npm run dev -- --host 127.0.0.1 --port %PORT%",
   "outputDirectory": "client/dist",
+  "crons": [
+  {
+    "path": "/api/maintenance/cleanup-rate-limits",
+    "schedule": "0 2 * * *"
+  }
+  ],
 
   "headers": [
     {

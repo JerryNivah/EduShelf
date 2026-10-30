@@ -23,11 +23,15 @@ import { env } from "../../server/config/env.js";
 import {
   createConfiguredOriginGuard,
 } from "../../server/config/trustedOriginGuard.js";
+import {
+  createAuthRateLimitGuard,
+} from "../../server/middleware/authRateLimit.js";
 
 export function createResendVerificationHandler(
   requestCode,
   originGuard = (req) =>
-    createConfiguredOriginGuard(env)(req)
+    createConfiguredOriginGuard(env)(req),
+  rateLimitGuard = async () => {}
 ) {
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
@@ -39,6 +43,7 @@ export function createResendVerificationHandler(
       }
 
       originGuard(req);
+      await rateLimitGuard(req, res);
 
       const { email } = validate(
         verificationEmailSchema,
@@ -59,5 +64,11 @@ export function createResendVerificationHandler(
 }
 
 export default createResendVerificationHandler(
-  requestEmailVerificationCode
+  requestEmailVerificationCode,
+  undefined,
+  createAuthRateLimitGuard({
+    scope: "resend-verification-ip",
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  })
 );
